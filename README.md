@@ -1,4 +1,30 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## Project Summary
+
+KnowledgeControl is a document-grounded knowledge assistant for individuals and small teams. Users create private workspaces, organize and upload documents, then ask questions about the knowledge contained in those documents. The product produces streamed answers supported by clear citations to the source files used.
+
+The first release prioritizes trust: responses must be grounded in uploaded content and clearly acknowledge when the available sources do not support a reliable answer.
+
+## Technology Stack
+
+| Area                         | Proposed choice                                                                                    |
+| ---------------------------- | -------------------------------------------------------------------------------------------------- |
+| Language                     | TypeScript                                                                                         |
+| Application architecture     | Modular full-stack monolith                                                                        |
+| Frontend                     | Next.js App Router + React                                                                         |
+| UI styling                   | Tailwind CSS + shadcn/ui components                                                                |
+| Backend/application boundary | Next.js server-side application layer and route handlers                                           |
+| Primary database             | Supabase PostgreSQL                                                                                |
+| Semantic retrieval           | PostgreSQL `pgvector` in Supabase                                                                  |
+| Data access                  | Prisma ORM + Prisma Migrate for relational data; server-side Supabase clients for Auth and Storage |
+| Authentication               | Supabase Auth, initially email/password sessions                                                   |
+| File storage                 | Supabase Storage private bucket                                                                    |
+| Background processing        | Inngest durable workflows                                                                          |
+| AI generation and embeddings | OpenAI Responses API and embeddings API                                                            |
+| Answer streaming             | Server-to-browser SSE through the Next.js application                                              |
+| Testing                      | Vitest + Playwright                                                                                |
+| Error monitoring             | Sentry                                                                                             |
+| Logs                         | Structured application and workflow logs                                                           |
+| Deployment                   | Vercel for the Next.js application; managed Supabase, Inngest, and OpenAI services                 |
 
 ## Getting Started
 
