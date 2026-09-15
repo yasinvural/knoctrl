@@ -28,7 +28,37 @@ The first release prioritizes trust: responses must be grounded in uploaded cont
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 22.12 or newer (the version required by Prisma and Vitest)
+- A Supabase project only for database, Auth, or Storage workflows
+- Docker only when running the Supabase CLI local stack
+- Playwright Chromium for browser tests
+
+### Setup
+
+Copy the environment template and replace its placeholders with values from the
+Supabase dashboard. Do not commit `.env.local`.
+
+```bash
+cp .env.example .env.local
+npm install
+npm run db:generate
+npx playwright install chromium
+```
+
+`DATABASE_URL` is the runtime transaction-pooler connection, while `DIRECT_URL`
+is used only by Prisma migration commands. Percent-encode reserved characters
+in database passwords.
+
+To work with a local Supabase stack later, install the CLI included with this
+project and start it with Docker:
+
+```bash
+npx supabase start
+```
+
+Run the development server:
 
 ```bash
 npm run dev
@@ -43,6 +73,18 @@ bun dev
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+### Tests
+
+```bash
+npm test
+npm run test:coverage
+npm run test:e2e
+```
+
+Vitest defaults to the Node environment; individual component tests opt into
+JSDOM. The Playwright suite uses Chromium and starts the Next.js development
+server automatically.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
