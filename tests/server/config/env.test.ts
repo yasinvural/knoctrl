@@ -6,7 +6,7 @@ const validEnvironment = {
   DATABASE_URL: "postgresql://postgres:password@localhost:5432/knoctrl",
   NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable-test-key",
-  SUPABASE_SERVICE_ROLE_KEY: "service-role-test-key",
+  SUPABASE_SECRET_KEY: "service-role-test-key",
 };
 
 describe("parseServerEnvironment", () => {
@@ -20,9 +20,9 @@ describe("parseServerEnvironment", () => {
     expect(() =>
       parseServerEnvironment({
         ...validEnvironment,
-        SUPABASE_SERVICE_ROLE_KEY: undefined,
-      }),
-    ).toThrow("SUPABASE_SERVICE_ROLE_KEY");
+        SUPABASE_SECRET_KEY: undefined,
+      })
+    ).toThrow("SUPABASE_SECRET_KEY");
 
     try {
       parseServerEnvironment({

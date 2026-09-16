@@ -6,21 +6,22 @@ const postgresConnectionString = z
   .string()
   .url()
   .refine(
-    (value) => value.startsWith("postgresql://") || value.startsWith("postgres://"),
-    "must be a PostgreSQL connection string",
+    (value) =>
+      value.startsWith("postgresql://") || value.startsWith("postgres://"),
+    "must be a PostgreSQL connection string"
   );
 
 const serverEnvironmentSchema = z.object({
   DATABASE_URL: postgresConnectionString,
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+  SUPABASE_SECRET_KEY: z.string().min(1),
 });
 
 export type ServerEnvironment = z.infer<typeof serverEnvironmentSchema>;
 
 export function parseServerEnvironment(
-  environment: Record<string, string | undefined>,
+  environment: Record<string, string | undefined>
 ): ServerEnvironment {
   const result = serverEnvironmentSchema.safeParse(environment);
 
@@ -33,7 +34,9 @@ export function parseServerEnvironment(
     .filter((path, index, paths) => paths.indexOf(path) === index);
 
   throw new Error(
-    `Server environment configuration is invalid: ${invalidVariables.join(", ")}. Check .env.example for required variables.`,
+    `Server environment configuration is invalid: ${invalidVariables.join(
+      ", "
+    )}. Check .env.example for required variables.`
   );
 }
 
