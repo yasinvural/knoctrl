@@ -42,7 +42,7 @@ test against the Next.js app through its `webServer` configuration.
   22.12+ before running test scripts.
 - `DATABASE_URL` and `DIRECT_URL` use different Supabase connection modes;
   swapping them can cause migration failure or connection exhaustion.
-- `SUPABASE_SERVICE_ROLE_KEY` bypasses Row Level Security. It must only be
+- `SUPABASE_SECRET_KEY` bypasses Row Level Security. It must only be
   imported from server-only code and never exposed in client bundles/logs.
 - The Supabase CLI normally requires Docker for its local stack. It will be
   installed and documented, but no local stack will run during this change.
