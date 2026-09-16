@@ -25,8 +25,14 @@ export default async function Home() {
           conversations.
         </p>
         <div className="flex flex-col justify-center gap-3 sm:flex-row">
-          <Button render={<Link href="/sign-up" />}>Create an account</Button>
-          <Button render={<Link href="/sign-in" />} variant="outline">
+          <Button render={<Link href="/sign-up" />} nativeButton={false}>
+            Create an account
+          </Button>
+          <Button
+            render={<Link href="/sign-in" />}
+            variant="outline"
+            nativeButton={false}
+          >
             Sign in
           </Button>
         </div>
