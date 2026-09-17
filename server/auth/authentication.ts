@@ -1,6 +1,7 @@
 import "server-only";
 
-import type { Credentials, SignOutFormState } from "@/server/auth/credentials";
+import type { SignOutFormState } from "@/lib/auth-form-state";
+import type { Credentials } from "@/server/auth/credentials";
 
 type CredentialAuthenticationClient = {
   auth: {
@@ -26,7 +27,7 @@ export async function registerWithPassword(
 ): Promise<boolean> {
   try {
     const { data, error } = await client.auth.signUp(credentials);
-
+    console.log("error:", error);
     return !error && Boolean(data.session);
   } catch {
     return false;

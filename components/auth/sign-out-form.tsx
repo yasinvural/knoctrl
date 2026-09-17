@@ -8,7 +8,7 @@ import { signOut } from "@/server/auth/actions";
 import {
   initialSignOutFormState,
   type SignOutFormState,
-} from "@/server/auth/credentials";
+} from "@/lib/auth-form-state";
 
 export function SignOutForm() {
   const [state, formAction, isPending] = useActionState<

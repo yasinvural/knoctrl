@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { AuthFormState } from "@/server/auth/credentials";
+import { initialAuthFormState, type AuthFormState } from "@/lib/auth-form-state";
 
 type AuthenticationAction = (
   previousState: AuthFormState,
@@ -30,8 +30,6 @@ type AuthFormProps = {
   title: string;
 };
 
-const initialState: AuthFormState = { status: "idle" };
-
 export function AuthForm({
   action,
   alternativeHref,
@@ -40,7 +38,10 @@ export function AuthForm({
   submitLabel,
   title,
 }: AuthFormProps) {
-  const [state, formAction, isPending] = useActionState(action, initialState);
+  const [state, formAction, isPending] = useActionState(
+    action,
+    initialAuthFormState
+  );
   const emailError = state.status === "error" ? state.fieldErrors?.email?.[0] : undefined;
   const passwordError =
     state.status === "error" ? state.fieldErrors?.password?.[0] : undefined;

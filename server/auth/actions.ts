@@ -8,11 +8,10 @@ import {
   signOutFromClient,
 } from "@/server/auth/authentication";
 import {
-  type AuthFormState,
-  type SignOutFormState,
   validateCredentials,
 } from "@/server/auth/credentials";
 import { createSupabaseServerActionClient } from "@/server/auth/server-action-client";
+import type { AuthFormState, SignOutFormState } from "@/lib/auth-form-state";
 
 export async function register(
   _previousState: AuthFormState,
