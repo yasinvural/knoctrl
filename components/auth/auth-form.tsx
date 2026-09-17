@@ -10,7 +10,6 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,7 +48,9 @@ export function AuthForm({
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
-        <CardTitle>{title}</CardTitle>
+        <h1 className="font-heading text-base leading-snug font-medium">
+          {title}
+        </h1>
         <CardDescription>
           Use your email address and password to access KnowledgeControl.
         </CardDescription>

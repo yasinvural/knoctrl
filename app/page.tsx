@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { getCurrentUser } from "@/server/auth/current-user";
 
 export default async function Home() {
@@ -25,16 +25,15 @@ export default async function Home() {
           conversations.
         </p>
         <div className="flex flex-col justify-center gap-3 sm:flex-row">
-          <Button render={<Link href="/sign-up" />} nativeButton={false}>
+          <Link className={buttonVariants()} href="/sign-up">
             Create an account
-          </Button>
-          <Button
-            render={<Link href="/sign-in" />}
-            variant="outline"
-            nativeButton={false}
+          </Link>
+          <Link
+            className={buttonVariants({ variant: "outline" })}
+            href="/sign-in"
           >
             Sign in
-          </Button>
+          </Link>
         </div>
       </section>
     </main>
