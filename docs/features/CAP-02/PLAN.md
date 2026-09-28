@@ -335,7 +335,7 @@ Steps 3–4.
 
 **Status**
 
-pending
+completed
 
 ### Step 6 — Verify the feature across persistence and browser flows
 
@@ -382,7 +382,7 @@ integration coverage.
 
 **Status**
 
-pending
+completed
 
 ## Feature-Level Test Strategy
 
