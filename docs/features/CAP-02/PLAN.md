@@ -232,7 +232,7 @@ Step 2.
 
 **Status**
 
-pending
+completed
 
 ### Step 4 — Establish the authenticated layout and workspace index
 
