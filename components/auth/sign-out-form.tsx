@@ -5,12 +5,23 @@ import { useActionState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { signOut } from "@/server/auth/actions";
+import { cn } from "@/lib/utils";
 import {
   initialSignOutFormState,
   type SignOutFormState,
 } from "@/lib/auth-form-state";
 
-export function SignOutForm() {
+type SignOutFormProps = {
+  ariaLabel?: string;
+  buttonClassName?: string;
+  label?: string;
+};
+
+export function SignOutForm({
+  ariaLabel,
+  buttonClassName,
+  label = "Sign out",
+}: SignOutFormProps) {
   const [state, formAction, isPending] = useActionState<
     SignOutFormState,
     FormData
@@ -23,8 +34,14 @@ export function SignOutForm() {
           <AlertDescription>{state.formError}</AlertDescription>
         </Alert>
       ) : null}
-      <Button disabled={isPending} type="submit" variant="outline">
-        {isPending ? "Signing out…" : "Sign out"}
+      <Button
+        aria-label={ariaLabel}
+        className={cn(buttonClassName)}
+        disabled={isPending}
+        type="submit"
+        variant="outline"
+      >
+        {isPending ? "Signing out…" : label}
       </Button>
     </form>
   );

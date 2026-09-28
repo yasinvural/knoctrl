@@ -1,5 +1,6 @@
 export type WorkspaceResourceFormState =
   | { status: "idle" }
+  | { status: "success" }
   | {
       status: "error";
       name: string;

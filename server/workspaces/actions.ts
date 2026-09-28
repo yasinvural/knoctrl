@@ -93,7 +93,7 @@ export async function createWorkspaceAction(
 
   if (result.status === "success") {
     revalidatePath("/app");
-    return { status: "idle" };
+    return { status: "success" };
   }
 
   return toResourceFormState(result, name);
@@ -116,7 +116,7 @@ export async function renameWorkspaceAction(
   if (result.status === "success") {
     revalidatePath("/app");
     revalidatePath(workspacePath(workspaceId));
-    return { status: "idle" };
+    return { status: "success" };
   }
 
   return toResourceFormState(result, name);
@@ -168,7 +168,7 @@ export async function createFolderAction(
 
   if (result.status === "success") {
     revalidatePath(workspacePath(workspaceId));
-    return { status: "idle" };
+    return { status: "success" };
   }
 
   return toResourceFormState(result, name);
@@ -191,7 +191,7 @@ export async function renameFolderAction(
 
   if (result.status === "success") {
     revalidatePath(workspacePath(workspaceId));
-    return { status: "idle" };
+    return { status: "success" };
   }
 
   return toResourceFormState(result, name);

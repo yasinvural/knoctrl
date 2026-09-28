@@ -85,7 +85,7 @@ describe("workspace actions", () => {
           name: "Client Research",
         })
       )
-    ).resolves.toEqual({ status: "idle" });
+    ).resolves.toEqual({ status: "success" });
     expect(cacheMock.revalidatePath).toHaveBeenCalledWith("/app");
     expect(cacheMock.revalidatePath).toHaveBeenCalledWith(
       `/app/workspaces/${workspaceId}`

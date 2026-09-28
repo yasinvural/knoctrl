@@ -284,7 +284,7 @@ Steps 2–3.
 
 **Status**
 
-pending
+completed
 
 ### Step 5 — Add workspace-detail and folder CRUD experiences
 
