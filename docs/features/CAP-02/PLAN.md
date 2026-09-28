@@ -188,7 +188,7 @@ Step 1; CAP-01's `getCurrentUser()` helper.
 
 **Status**
 
-pending
+completed
 
 ### Step 3 — Expose workspace mutations through Server Actions
 
