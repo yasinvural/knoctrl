@@ -6,3 +6,31 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+model Workspace {
+  id             String   @id @default(uuid()) @db.Uuid
+  ownerId        String   @map("owner_id") @db.Uuid
+  name           String   @db.VarChar(100)
+  normalizedName String   @map("normalized_name") @db.VarChar(100)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  folders        Folder[]
+
+  @@unique([ownerId, normalizedName], map: "workspaces_owner_id_normalized_name_key")
+  @@index([ownerId, createdAt, id], map: "workspaces_owner_id_created_at_id_idx")
+  @@map("workspaces")
+}
+
+model Folder {
+  id             String    @id @default(uuid()) @db.Uuid
+  workspaceId    String    @map("workspace_id") @db.Uuid
+  name           String    @db.VarChar(100)
+  normalizedName String    @map("normalized_name") @db.VarChar(100)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, normalizedName], map: "folders_workspace_id_normalized_name_key")
+  @@index([workspaceId, createdAt, id], map: "folders_workspace_id_created_at_id_idx")
+  @@map("folders")
+}
