@@ -10,6 +10,7 @@ export type WorkspaceResourceFormState =
 
 export type WorkspaceDeleteFormState =
   | { status: "idle" }
+  | { status: "success" }
   | { status: "error"; formError: string };
 
 export const initialWorkspaceResourceFormState: WorkspaceResourceFormState = {

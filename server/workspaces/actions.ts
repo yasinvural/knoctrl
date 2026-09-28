@@ -220,7 +220,7 @@ export async function deleteFolderAction(
 
   if (result.status === "success") {
     revalidatePath(workspacePath(workspaceId));
-    return { status: "idle" };
+    return { status: "success" };
   }
 
   return {
