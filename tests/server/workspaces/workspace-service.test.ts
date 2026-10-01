@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const prismaMock = vi.hoisted(() => ({
+  $transaction: vi.fn(),
   folder: {
     create: vi.fn(),
     deleteMany: vi.fn(),
+    findFirst: vi.fn(),
     updateMany: vi.fn(),
   },
   workspace: {
@@ -12,15 +14,23 @@ const prismaMock = vi.hoisted(() => ({
     findMany: vi.fn(),
     updateMany: vi.fn(),
   },
+  document: {
+    findMany: vi.fn(),
+  },
 }));
+const prepareDocumentDeletion = vi.hoisted(() => vi.fn());
 
 vi.mock("@/server/db/prisma", () => ({
   prisma: prismaMock,
+}));
+vi.mock("@/server/documents/document-service", () => ({
+  prepareDocumentDeletion,
 }));
 
 import {
   createFolder,
   createWorkspace,
+  deleteFolder,
   listWorkspaces,
   renameFolder,
 } from "@/server/workspaces/workspace-service";
@@ -28,6 +38,10 @@ import {
 describe("workspace service", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    prismaMock.$transaction.mockImplementation(async (callback) =>
+      callback(prismaMock)
+    );
+    prismaMock.document.findMany.mockResolvedValue([]);
   });
 
   it("lists workspaces with an owner predicate and a bounded page", async () => {
@@ -117,5 +131,52 @@ describe("workspace service", () => {
         normalizedName: "archived",
       },
     });
+  });
+
+  it("reports the folder's document count before cascading deletion", async () => {
+    prismaMock.folder.findFirst.mockResolvedValue({
+      id: "folder-1",
+      _count: { documents: 2 },
+    });
+    prismaMock.folder.deleteMany.mockResolvedValue({ count: 1 });
+    prismaMock.document.findMany.mockResolvedValue([
+      {
+        storageKey: "owner-1/document-key",
+        fileSize: BigInt(10),
+        uploadedAt: null,
+      },
+    ]);
+
+    await expect(deleteFolder("owner-1", "folder-1")).resolves.toEqual({
+      status: "success",
+      documentCount: 2,
+    });
+    expect(prismaMock.folder.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: "folder-1",
+        workspace: {
+          ownerId: "owner-1",
+        },
+      },
+      select: {
+        id: true,
+        _count: {
+          select: {
+            documents: true,
+          },
+        },
+      },
+    });
+    expect(prepareDocumentDeletion).toHaveBeenCalledWith(
+      prismaMock,
+      "owner-1",
+      [
+        {
+          storageKey: "owner-1/document-key",
+          fileSize: BigInt(10),
+          uploadedAt: null,
+        },
+      ]
+    );
   });
 });

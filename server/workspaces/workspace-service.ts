@@ -1,6 +1,10 @@
 import "server-only";
 
 import { prisma } from "@/server/db/prisma";
+import {
+  prepareDocumentDeletion,
+} from "@/server/documents/document-service";
+import type { DocumentListItem } from "@/server/documents/types";
 
 import {
   validateWorkspaceResourceName,
@@ -19,10 +23,13 @@ export type FolderListItem = {
   id: string;
   name: string;
   createdAt: Date;
+  documents: DocumentListItem[];
 };
 
 export type WorkspaceDetail = WorkspaceListItem & {
   folders: FolderListItem[];
+  documents: DocumentListItem[];
+  documentCount: number;
 };
 
 export type WorkspaceList = {
@@ -41,13 +48,13 @@ export type WorkspaceDeletionResult =
   | {
       status: "success";
       folderCount: number;
-      documentCount: 0;
+      documentCount: number;
     }
   | { status: "unavailable" }
   | { status: "error" };
 
 export type FolderDeletionResult =
-  | { status: "success"; documentCount: 0 }
+  | { status: "success"; documentCount: number }
   | { status: "unavailable" }
   | { status: "error" };
 
@@ -106,7 +113,7 @@ export async function getWorkspaceDetail(
   ownerId: string,
   workspaceId: string
 ): Promise<WorkspaceDetail | null> {
-  return prisma.workspace.findFirst({
+  const workspace = await prisma.workspace.findFirst({
     where: {
       id: workspaceId,
       ownerId,
@@ -121,10 +128,53 @@ export async function getWorkspaceDetail(
           id: true,
           name: true,
           createdAt: true,
+          documents: {
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+            take: workspacePageSize,
+            select: {
+              id: true,
+              filename: true,
+              folderId: true,
+              status: true,
+              failureMessage: true,
+              createdAt: true,
+            },
+          },
+        },
+      },
+      documents: {
+        where: { folderId: null },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        take: workspacePageSize,
+        select: {
+          id: true,
+          filename: true,
+          folderId: true,
+          status: true,
+          failureMessage: true,
+          createdAt: true,
+        },
+      },
+      _count: {
+        select: {
+          documents: true,
         },
       },
     },
   });
+
+  if (!workspace) {
+    return null;
+  }
+
+  return {
+    id: workspace.id,
+    name: workspace.name,
+    createdAt: workspace.createdAt,
+    folders: workspace.folders,
+    documents: workspace.documents,
+    documentCount: workspace._count.documents,
+  };
 }
 
 export async function createWorkspace(
@@ -211,6 +261,7 @@ export async function deleteWorkspace(
           _count: {
             select: {
               folders: true,
+              documents: true,
             },
           },
         },
@@ -219,6 +270,13 @@ export async function deleteWorkspace(
       if (!workspace) {
         return { status: "unavailable" };
       }
+
+      const documents = await transaction.document.findMany({
+        where: { workspaceId: workspace.id },
+        select: { storageKey: true, fileSize: true, uploadedAt: true },
+      });
+
+      await prepareDocumentDeletion(transaction, ownerId, documents);
 
       const deleted = await transaction.workspace.deleteMany({
         where: {
@@ -234,7 +292,7 @@ export async function deleteWorkspace(
       return {
         status: "success",
         folderCount: workspace._count.folders,
-        documentCount: 0,
+        documentCount: workspace._count.documents,
       };
     });
   } catch {
@@ -336,18 +394,48 @@ export async function deleteFolder(
   folderId: string
 ): Promise<FolderDeletionResult> {
   try {
-    const deleted = await prisma.folder.deleteMany({
-      where: {
-        id: folderId,
-        workspace: {
-          ownerId,
+    return await prisma.$transaction(async (transaction) => {
+      const folder = await transaction.folder.findFirst({
+        where: {
+          id: folderId,
+          workspace: {
+            ownerId,
+          },
         },
-      },
-    });
+        select: {
+          id: true,
+          _count: {
+            select: {
+              documents: true,
+            },
+          },
+        },
+      });
 
-    return deleted.count === 1
-      ? { status: "success", documentCount: 0 }
-      : { status: "unavailable" };
+      if (!folder) {
+        return { status: "unavailable" };
+      }
+
+      const documents = await transaction.document.findMany({
+        where: { folderId: folder.id, workspace: { ownerId } },
+        select: { storageKey: true, fileSize: true, uploadedAt: true },
+      });
+
+      await prepareDocumentDeletion(transaction, ownerId, documents);
+
+      const deleted = await transaction.folder.deleteMany({
+        where: {
+          id: folder.id,
+          workspace: {
+            ownerId,
+          },
+        },
+      });
+
+      return deleted.count === 1
+        ? { status: "success", documentCount: folder._count.documents }
+        : { status: "unavailable" };
+    });
   } catch {
     return { status: "error" };
   }
