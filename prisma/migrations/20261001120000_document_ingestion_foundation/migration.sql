@@ -17,6 +17,7 @@ CREATE TABLE "documents" (
     "processing_attempt" INTEGER NOT NULL DEFAULT 1,
     "failure_code" VARCHAR(100),
     "failure_message" VARCHAR(500),
+    "upload_intent_expires_at" TIMESTAMPTZ(6) NOT NULL,
     "uploaded_at" TIMESTAMPTZ(6),
     "available_at" TIMESTAMPTZ(6),
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -99,23 +100,31 @@ CREATE INDEX "document_chunks_embedding_cosine_idx" ON "document_chunks" USING h
 
 -- Private Storage bucket for original document objects. Bucket policy is
 -- owner-scoped; callers must place each object under <owner-id>/<uuid>.
-INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES (
-  'documents',
-  'documents',
-  false,
-  10485760,
-  ARRAY[
-    'application/pdf',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'text/csv',
-    'text/plain'
-  ]::text[]
-)
-ON CONFLICT (id) DO UPDATE
-SET public = EXCLUDED.public,
-    file_size_limit = EXCLUDED.file_size_limit,
-    allowed_mime_types = EXCLUDED.allowed_mime_types;
+DO $storage_bucket$
+BEGIN
+  IF to_regclass('storage.buckets') IS NOT NULL THEN
+    EXECUTE $bucket$
+      INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+      VALUES (
+        'documents',
+        'documents',
+        false,
+        10485760,
+        ARRAY[
+          'application/pdf',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'text/csv',
+          'text/plain'
+        ]::text[]
+      )
+      ON CONFLICT (id) DO UPDATE
+      SET public = EXCLUDED.public,
+          file_size_limit = EXCLUDED.file_size_limit,
+          allowed_mime_types = EXCLUDED.allowed_mime_types
+    $bucket$;
+  END IF;
+END
+$storage_bucket$;
 
 ALTER TABLE "documents" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "document_chunks" ENABLE ROW LEVEL SECURITY;
@@ -243,34 +252,48 @@ CREATE POLICY "document_usages_delete_own" ON "document_usages"
   FOR DELETE TO authenticated
   USING ("owner_id" = (SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid));
 
-CREATE POLICY "document_storage_select_own" ON storage.objects
-  FOR SELECT TO authenticated
-  USING (
-    bucket_id = 'documents'
-    AND (storage.foldername(name))[1] = (SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid)::text
-  );
+DO $storage_policies$
+BEGIN
+  IF to_regclass('storage.objects') IS NOT NULL THEN
+    EXECUTE $select_policy$
+      CREATE POLICY "document_storage_select_own" ON storage.objects
+        FOR SELECT TO authenticated
+        USING (
+          bucket_id = 'documents'
+          AND (storage.foldername(name))[1] = (SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid)::text
+        )
+    $select_policy$;
 
-CREATE POLICY "document_storage_insert_own" ON storage.objects
-  FOR INSERT TO authenticated
-  WITH CHECK (
-    bucket_id = 'documents'
-    AND (storage.foldername(name))[1] = (SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid)::text
-  );
+    EXECUTE $insert_policy$
+      CREATE POLICY "document_storage_insert_own" ON storage.objects
+        FOR INSERT TO authenticated
+        WITH CHECK (
+          bucket_id = 'documents'
+          AND (storage.foldername(name))[1] = (SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid)::text
+        )
+    $insert_policy$;
 
-CREATE POLICY "document_storage_update_own" ON storage.objects
-  FOR UPDATE TO authenticated
-  USING (
-    bucket_id = 'documents'
-    AND (storage.foldername(name))[1] = (SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid)::text
-  )
-  WITH CHECK (
-    bucket_id = 'documents'
-    AND (storage.foldername(name))[1] = (SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid)::text
-  );
+    EXECUTE $update_policy$
+      CREATE POLICY "document_storage_update_own" ON storage.objects
+        FOR UPDATE TO authenticated
+        USING (
+          bucket_id = 'documents'
+          AND (storage.foldername(name))[1] = (SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid)::text
+        )
+        WITH CHECK (
+          bucket_id = 'documents'
+          AND (storage.foldername(name))[1] = (SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid)::text
+        )
+    $update_policy$;
 
-CREATE POLICY "document_storage_delete_own" ON storage.objects
-  FOR DELETE TO authenticated
-  USING (
-    bucket_id = 'documents'
-    AND (storage.foldername(name))[1] = (SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid)::text
-  );
+    EXECUTE $delete_policy$
+      CREATE POLICY "document_storage_delete_own" ON storage.objects
+        FOR DELETE TO authenticated
+        USING (
+          bucket_id = 'documents'
+          AND (storage.foldername(name))[1] = (SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid)::text
+        )
+    $delete_policy$;
+  END IF;
+END
+$storage_policies$;

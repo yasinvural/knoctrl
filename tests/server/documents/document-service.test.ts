@@ -30,6 +30,7 @@ vi.mock("@/server/db/prisma", () => ({
 }));
 
 import {
+  completeDocumentUpload,
   deleteDocument,
   reserveDocuments,
   retryDocument,
@@ -173,6 +174,28 @@ describe("document service", () => {
     expect(prismaMock.documentUsage.update).toHaveBeenCalledWith({
       where: { ownerId: "owner-1" },
       data: { storedBytes: BigInt(0), reservedBytes: BigInt(0) },
+    });
+  });
+
+  it("moves an owned reserved upload into stored usage exactly once", async () => {
+    prismaMock.document.findFirst.mockResolvedValue({
+      fileSize: BigInt(10),
+      processingAttempt: 1,
+      status: "processing",
+      uploadedAt: null,
+    });
+    prismaMock.document.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.$queryRaw.mockResolvedValue([
+      { storedBytes: BigInt(20), reservedBytes: BigInt(10) },
+    ]);
+
+    await expect(completeDocumentUpload("owner-1", "document-1")).resolves.toEqual({
+      status: "success",
+      processingAttempt: 1,
+    });
+    expect(prismaMock.documentUsage.update).toHaveBeenCalledWith({
+      where: { ownerId: "owner-1" },
+      data: { storedBytes: BigInt(30), reservedBytes: BigInt(0) },
     });
   });
 });

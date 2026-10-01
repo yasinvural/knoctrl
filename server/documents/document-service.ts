@@ -8,6 +8,8 @@ import { prisma } from "@/server/db/prisma";
 
 import type {
   DocumentDeletionResult,
+  DocumentCompletionCandidateResult,
+  DocumentCompletionResult,
   DocumentListItem,
   DocumentReservation,
   DocumentReservationResult,
@@ -24,6 +26,8 @@ type LockedDocumentUsage = {
   storedBytes: bigint;
   reservedBytes: bigint;
 };
+
+const uploadIntentLifetimeMilliseconds = 60 * 60 * 1000;
 
 export async function queueDocumentStorageCleanup(
   transaction: DocumentTransaction,
@@ -169,6 +173,9 @@ export async function reserveDocuments(
 
   try {
     return await prisma.$transaction(async (transaction) => {
+      const uploadIntentExpiresAt = new Date(
+        Date.now() + uploadIntentLifetimeMilliseconds
+      );
       const workspace = await transaction.workspace.findFirst({
         where: { id: input.workspaceId, ownerId },
         select: { id: true },
@@ -253,6 +260,7 @@ export async function reserveDocuments(
             storageKey: `${ownerId}/${randomUUID()}`,
             contentType: file.contentType,
             fileSize: BigInt(file.fileSize),
+            uploadIntentExpiresAt,
           },
           select: {
             id: true,
@@ -380,6 +388,118 @@ export async function deleteDocument(
       });
 
       return deleted.count === 1 ? { status: "success" } : { status: "unavailable" };
+    });
+  } catch {
+    return { status: "error" };
+  }
+}
+
+export async function getDocumentCompletionCandidate(
+  ownerId: string,
+  documentId: string
+): Promise<DocumentCompletionCandidateResult> {
+  const document = await prisma.document.findFirst({
+    where: { id: documentId, workspace: { ownerId } },
+    select: {
+      id: true,
+      storageKey: true,
+      contentType: true,
+      fileSize: true,
+      processingAttempt: true,
+      uploadIntentExpiresAt: true,
+      status: true,
+      uploadedAt: true,
+    },
+  });
+
+  if (!document) {
+    return { status: "unavailable" };
+  }
+
+  if (document.status !== "processing") {
+    return { status: "invalid_state" };
+  }
+
+  if (!document.uploadedAt && document.uploadIntentExpiresAt <= new Date()) {
+    return { status: "invalid_state" };
+  }
+
+  return {
+    status: "success",
+    document: {
+      id: document.id,
+      storageKey: document.storageKey,
+      contentType: document.contentType,
+      fileSize: Number(document.fileSize),
+      processingAttempt: document.processingAttempt,
+      uploadedAt: document.uploadedAt,
+    },
+  };
+}
+
+export async function completeDocumentUpload(
+  ownerId: string,
+  documentId: string
+): Promise<DocumentCompletionResult> {
+  try {
+    return await prisma.$transaction(async (transaction) => {
+      const document = await transaction.document.findFirst({
+        where: { id: documentId, workspace: { ownerId } },
+        select: {
+          fileSize: true,
+          processingAttempt: true,
+          status: true,
+          uploadedAt: true,
+        },
+      });
+
+      if (!document) {
+        return { status: "unavailable" };
+      }
+
+      if (document.status !== "processing") {
+        return { status: "invalid_state" };
+      }
+
+      if (document.uploadedAt) {
+        return {
+          status: "already_completed",
+          processingAttempt: document.processingAttempt,
+        };
+      }
+
+      const markedUploaded = await transaction.document.updateMany({
+        where: {
+          id: documentId,
+          status: "processing",
+          uploadedAt: null,
+          workspace: { ownerId },
+        },
+        data: { uploadedAt: new Date() },
+      });
+
+      if (markedUploaded.count !== 1) {
+        return { status: "conflict" };
+      }
+
+      const usage = await getLockedUsage(transaction, ownerId);
+      const reservedBytes =
+        usage.reservedBytes > document.fileSize
+          ? usage.reservedBytes - document.fileSize
+          : BigInt(0);
+
+      await transaction.documentUsage.update({
+        where: { ownerId },
+        data: {
+          storedBytes: usage.storedBytes + document.fileSize,
+          reservedBytes,
+        },
+      });
+
+      return {
+        status: "success",
+        processingAttempt: document.processingAttempt,
+      };
     });
   } catch {
     return { status: "error" };

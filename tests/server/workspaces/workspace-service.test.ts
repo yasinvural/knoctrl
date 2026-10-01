@@ -71,6 +71,26 @@ describe("workspace service", () => {
     );
   });
 
+  it("does not apply a cursor that belongs to another owner", async () => {
+    prismaMock.workspace.findFirst.mockResolvedValue(null);
+    prismaMock.workspace.findMany.mockResolvedValue([]);
+
+    await expect(listWorkspaces("owner-1", "workspace-owned-by-someone-else")).resolves.toEqual({
+      workspaces: [],
+      nextCursor: null,
+    });
+    expect(prismaMock.workspace.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: "workspace-owned-by-someone-else",
+        ownerId: "owner-1",
+      },
+      select: { id: true },
+    });
+    expect(prismaMock.workspace.findMany).toHaveBeenCalledWith(
+      expect.not.objectContaining({ cursor: expect.anything(), skip: 1 })
+    );
+  });
+
   it("does not persist an invalid workspace name", async () => {
     await expect(createWorkspace("owner-1", "   ")).resolves.toEqual({
       status: "invalid",

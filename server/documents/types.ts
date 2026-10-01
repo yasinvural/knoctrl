@@ -72,3 +72,25 @@ export type DocumentDeletionResult =
   | { status: "success" }
   | { status: "unavailable" }
   | { status: "error" };
+
+export type DocumentCompletionCandidate = {
+  id: string;
+  storageKey: string;
+  contentType: string;
+  fileSize: number;
+  processingAttempt: number;
+  uploadedAt: Date | null;
+};
+
+export type DocumentCompletionCandidateResult =
+  | { status: "success"; document: DocumentCompletionCandidate }
+  | { status: "unavailable" }
+  | { status: "invalid_state" };
+
+export type DocumentCompletionResult =
+  | { status: "success"; processingAttempt: number }
+  | { status: "already_completed"; processingAttempt: number }
+  | { status: "unavailable" }
+  | { status: "invalid_state" }
+  | { status: "conflict" }
+  | { status: "error" };

@@ -61,6 +61,7 @@ model Document {
   processingAttempt Int            @default(1) @map("processing_attempt")
   failureCode       String?        @map("failure_code") @db.VarChar(100)
   failureMessage    String?        @map("failure_message") @db.VarChar(500)
+  uploadIntentExpiresAt DateTime   @map("upload_intent_expires_at") @db.Timestamptz(6)
   uploadedAt        DateTime?      @map("uploaded_at") @db.Timestamptz(6)
   availableAt       DateTime?      @map("available_at") @db.Timestamptz(6)
   createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)

@@ -85,11 +85,17 @@ export async function listWorkspaces(
   ownerId: string,
   cursor?: string
 ): Promise<WorkspaceList> {
+  const ownedCursor = cursor
+    ? await prisma.workspace.findFirst({
+        where: { id: cursor, ownerId },
+        select: { id: true },
+      })
+    : null;
   const workspaces = await prisma.workspace.findMany({
     where: { ownerId },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: workspacePageSize + 1,
-    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    ...(ownedCursor ? { cursor: { id: ownedCursor.id }, skip: 1 } : {}),
     select: {
       id: true,
       name: true,
