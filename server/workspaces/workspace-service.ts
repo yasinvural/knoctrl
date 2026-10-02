@@ -24,12 +24,16 @@ export type FolderListItem = {
   name: string;
   createdAt: Date;
   documents: DocumentListItem[];
+  documentCount: number;
+  documentPage: number;
 };
 
 export type WorkspaceDetail = WorkspaceListItem & {
   folders: FolderListItem[];
   documents: DocumentListItem[];
   documentCount: number;
+  rootDocumentCount: number;
+  documentPage: number;
 };
 
 export type WorkspaceList = {
@@ -117,7 +121,8 @@ export async function listWorkspaces(
 
 export async function getWorkspaceDetail(
   ownerId: string,
-  workspaceId: string
+  workspaceId: string,
+  documentPagination: { folderId?: string; page?: number } = {}
 ): Promise<WorkspaceDetail | null> {
   const workspace = await prisma.workspace.findFirst({
     where: {
@@ -134,6 +139,7 @@ export async function getWorkspaceDetail(
           id: true,
           name: true,
           createdAt: true,
+          _count: { select: { documents: true } },
           documents: {
             orderBy: [{ createdAt: "asc" }, { id: "asc" }],
             take: workspacePageSize,
@@ -173,13 +179,42 @@ export async function getWorkspaceDetail(
     return null;
   }
 
+  const rootDocumentCount = workspace._count.documents - workspace.folders.reduce((sum, folder) => sum + folder._count.documents, 0);
+  const folders = workspace.folders.map((folder) => ({
+    id: folder.id, name: folder.name, createdAt: folder.createdAt,
+    documents: folder.documents, documentCount: folder._count.documents, documentPage: 1,
+  }));
+  const selectedFolder = documentPagination.folderId ? folders.find((folder) => folder.id === documentPagination.folderId) : undefined;
+  const requestedPage = Math.max(1, Math.floor(documentPagination.page ?? 1));
+  const count = selectedFolder ? selectedFolder.documentCount : rootDocumentCount;
+  const page = Math.min(requestedPage, Math.max(1, Math.ceil(count / workspacePageSize)));
+  let rootDocuments = workspace.documents;
+  let rootPage = 1;
+  if (page > 1 && (!documentPagination.folderId || selectedFolder)) {
+    const documents = await prisma.document.findMany({
+      where: { workspaceId, folderId: selectedFolder?.id ?? null, workspace: { ownerId } },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: workspacePageSize, skip: (page - 1) * workspacePageSize,
+      select: { id: true, filename: true, folderId: true, status: true, failureMessage: true, createdAt: true },
+    });
+    if (selectedFolder) {
+      selectedFolder.documents = documents;
+      selectedFolder.documentPage = page;
+    } else {
+      rootDocuments = documents;
+      rootPage = page;
+    }
+  }
+
   return {
     id: workspace.id,
     name: workspace.name,
     createdAt: workspace.createdAt,
-    folders: workspace.folders,
-    documents: workspace.documents,
+    folders,
+    documents: rootDocuments,
     documentCount: workspace._count.documents,
+    rootDocumentCount,
+    documentPage: rootPage,
   };
 }
 

@@ -31,6 +31,7 @@ import {
   createFolder,
   createWorkspace,
   deleteFolder,
+  getWorkspaceDetail,
   listWorkspaces,
   renameFolder,
 } from "@/server/workspaces/workspace-service";
@@ -69,6 +70,29 @@ describe("workspace service", () => {
         where: { ownerId: "owner-1" },
       })
     );
+  });
+
+  it("maps accurate root and folder counts and pages only the requested owned location", async () => {
+    prismaMock.workspace.findFirst.mockResolvedValue({
+      id: "workspace-1", name: "Research", createdAt: new Date(), documents: [],
+      folders: [{ id: "folder-1", name: "Folder", createdAt: new Date(), documents: [], _count: { documents: 51 } }],
+      _count: { documents: 54 },
+    });
+    prismaMock.document.findMany.mockResolvedValue([{ id: "document-51", filename: "last.txt", folderId: "folder-1", status: "available", failureMessage: null, createdAt: new Date() }]);
+    const result = await getWorkspaceDetail("owner-1", "workspace-1", { folderId: "folder-1", page: 999 });
+    expect(result).toMatchObject({ documentCount: 54, rootDocumentCount: 3, documentPage: 1,
+      folders: [{ documentCount: 51, documentPage: 2, documents: [{ id: "document-51" }] }] });
+    expect(prismaMock.document.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { workspaceId: "workspace-1", folderId: "folder-1", workspace: { ownerId: "owner-1" } }, take: 50, skip: 50,
+    }));
+  });
+
+  it("does not query a document page for a folder outside the owned workspace", async () => {
+    prismaMock.workspace.findFirst.mockResolvedValue({
+      id: "workspace-1", name: "Research", createdAt: new Date(), folders: [], documents: [], _count: { documents: 100 },
+    });
+    await getWorkspaceDetail("owner-1", "workspace-1", { folderId: "foreign-folder", page: 2 });
+    expect(prismaMock.document.findMany).not.toHaveBeenCalled();
   });
 
   it("does not apply a cursor that belongs to another owner", async () => {

@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
 
+import { DocumentRefresh } from "@/components/documents/document-refresh";
+import { DocumentSection } from "@/components/documents/document-section";
 import { DeleteResourceDialog } from "@/components/workspaces/delete-resource-dialog";
 import { ResourceNameForm } from "@/components/workspaces/resource-name-form";
 import {
@@ -25,10 +27,12 @@ const workspaceIdSchema = z.string().uuid();
 
 type WorkspaceDetailPageProps = {
   params: Promise<{ workspaceId: string }>;
+  searchParams: Promise<{ documentPage?: string; documentFolder?: string }>;
 };
 
 export default async function WorkspaceDetailPage({
   params,
+  searchParams,
 }: WorkspaceDetailPageProps) {
   const currentUser = await getCurrentUser();
 
@@ -43,9 +47,13 @@ export default async function WorkspaceDetailPage({
     notFound();
   }
 
+  const search = await searchParams;
+  const documentPage = z.coerce.number().int().min(1).max(100000).safeParse(search.documentPage ?? 1);
+  const documentFolder = z.string().uuid().safeParse(search.documentFolder);
   const workspace = await getWorkspaceDetail(
     currentUser.user.id,
-    parsedWorkspaceId.data
+    parsedWorkspaceId.data,
+    { page: documentPage.success ? documentPage.data : 1, folderId: documentFolder.success ? documentFolder.data : undefined }
   );
 
   if (!workspace) {
@@ -54,11 +62,14 @@ export default async function WorkspaceDetailPage({
 
   const folderCountDescription = `${workspace.folders.length} ${
     workspace.folders.length === 1 ? "folder" : "folders"
-  } and 0 documents`;
+  } and ${workspace.documentCount} ${workspace.documentCount === 1 ? "document" : "documents"}`;
+  const processing = [...workspace.documents, ...workspace.folders.flatMap((folder) => folder.documents)]
+    .some((document) => document.status === "processing");
 
   return (
     <main className="flex flex-1 bg-muted/40">
       <div className="mx-auto w-full max-w-6xl space-y-8 p-4 sm:p-6">
+        <DocumentRefresh processing={processing} />
         <div className="space-y-3">
           <Link
             className="inline-flex text-sm font-medium underline underline-offset-4"
@@ -71,10 +82,11 @@ export default async function WorkspaceDetailPage({
             <h1 className="mt-1 text-2xl font-semibold tracking-tight">
               {workspace.name}
             </h1>
+            <p className="mt-2 text-sm text-muted-foreground">{folderCountDescription}</p>
           </div>
         </div>
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
-          <section aria-labelledby="folders-heading" className="space-y-4">
+          <section aria-labelledby="folders-heading" className="min-w-0 space-y-4">
             <div>
               <h2 className="text-lg font-medium" id="folders-heading">
                 Folders
@@ -95,12 +107,14 @@ export default async function WorkspaceDetailPage({
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
                 {workspace.folders.map((folder) => (
-                  <Card key={folder.id}>
+                  <Card className="min-w-0" key={folder.id}>
                     <CardHeader>
-                      <CardTitle>{folder.name}</CardTitle>
-                      <CardDescription>No documents yet.</CardDescription>
+                      <CardTitle className="break-words">{folder.name}</CardTitle>
+                      <CardDescription>{folder.documentCount} {folder.documentCount === 1 ? "document" : "documents"}</CardDescription>
                     </CardHeader>
                     <CardContent className="grid gap-4">
+                      <DocumentSection destinationName={folder.name} documentCount={folder.documentCount}
+                        documents={folder.documents} folderId={folder.id} page={folder.documentPage} workspaceId={workspace.id} />
                       <ResourceNameForm
                         action={renameFolderAction}
                         hiddenFields={{
@@ -114,7 +128,7 @@ export default async function WorkspaceDetailPage({
                       />
                       <DeleteResourceDialog
                         action={deleteFolderAction}
-                        description={`Deleting this folder permanently removes it and its 0 documents.`}
+                        description={`Deleting this folder permanently removes it and its ${folder.documentCount} documents and stored source files.`}
                         hiddenFields={{
                           folderId: folder.id,
                           workspaceId: workspace.id,
@@ -165,7 +179,7 @@ export default async function WorkspaceDetailPage({
                 />
                 <DeleteResourceDialog
                   action={deleteWorkspaceAction}
-                  description={`Deleting this workspace permanently removes ${folderCountDescription}.`}
+                  description={`Deleting this workspace permanently removes ${folderCountDescription} and their stored source files.`}
                   hiddenFields={{ workspaceId: workspace.id }}
                   title={`Delete ${workspace.name}?`}
                   triggerLabel="Delete workspace"
@@ -176,11 +190,15 @@ export default async function WorkspaceDetailPage({
         </div>
         <Card>
           <CardHeader>
-            <CardTitle>Documents</CardTitle>
+            <CardTitle>Workspace documents</CardTitle>
             <CardDescription>
-              No documents yet. Uploading documents will be available in the next capability.
+              {workspace.rootDocumentCount} {workspace.rootDocumentCount === 1 ? "document" : "documents"} directly in this workspace.
             </CardDescription>
           </CardHeader>
+          <CardContent>
+            <DocumentSection destinationName="workspace root" documentCount={workspace.rootDocumentCount}
+              documents={workspace.documents} page={workspace.documentPage} workspaceId={workspace.id} />
+          </CardContent>
         </Card>
       </div>
     </main>

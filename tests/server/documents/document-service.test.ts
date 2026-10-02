@@ -31,6 +31,7 @@ vi.mock("@/server/db/prisma", () => ({
 
 import {
   completeDocumentUpload,
+  cancelDocumentUpload,
   deleteDocument,
   expireDocumentUpload,
   reserveDocuments,
@@ -205,6 +206,16 @@ describe("document service", () => {
     await expireDocumentUpload("owner-1", "document-1");
     expect(prismaMock.document.findFirst).not.toHaveBeenCalled();
     expect(prismaMock.documentUsage.update).not.toHaveBeenCalled();
+  });
+
+  it("never cancels a completed or differently owned upload", async () => {
+    prismaMock.document.updateMany.mockResolvedValue({ count: 0 });
+    await expect(cancelDocumentUpload("owner-1", "document-1")).resolves.toEqual({ status: "unavailable" });
+    expect(prismaMock.document.updateMany).toHaveBeenCalledWith({
+      where: { id: "document-1", uploadedAt: null, workspace: { ownerId: "owner-1" } }, data: { status: "failed" },
+    });
+    expect(prismaMock.documentUsage.update).not.toHaveBeenCalled();
+    expect(prismaMock.document.deleteMany).not.toHaveBeenCalled();
   });
 
   it("expires an owned abandoned upload and atomically releases reserved quota", async () => {
