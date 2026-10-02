@@ -32,6 +32,7 @@ vi.mock("@/server/db/prisma", () => ({
 import {
   completeDocumentUpload,
   deleteDocument,
+  expireDocumentUpload,
   reserveDocuments,
   retryDocument,
 } from "@/server/documents/document-service";
@@ -197,5 +198,24 @@ describe("document service", () => {
       where: { ownerId: "owner-1" },
       data: { storedBytes: BigInt(30), reservedBytes: BigInt(0) },
     });
+  });
+
+  it("does not expire an upload that completed or disappeared before the claim", async () => {
+    prismaMock.document.updateMany.mockResolvedValue({ count: 0 });
+    await expireDocumentUpload("owner-1", "document-1");
+    expect(prismaMock.document.findFirst).not.toHaveBeenCalled();
+    expect(prismaMock.documentUsage.update).not.toHaveBeenCalled();
+  });
+
+  it("expires an owned abandoned upload and atomically releases reserved quota", async () => {
+    prismaMock.document.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.document.findFirst.mockResolvedValue({ storageKey: "private/key", fileSize: BigInt(10), uploadedAt: null });
+    prismaMock.$queryRaw.mockResolvedValue([{ storedBytes: BigInt(20), reservedBytes: BigInt(10) }]);
+    await expireDocumentUpload("owner-1", "document-1");
+    expect(prismaMock.documentUsage.update).toHaveBeenCalledWith({
+      where: { ownerId: "owner-1" }, data: { storedBytes: BigInt(20), reservedBytes: BigInt(0) },
+    });
+    expect(prismaMock.storageCleanupTask.createMany).toHaveBeenCalled();
+    expect(prismaMock.document.deleteMany).toHaveBeenCalledWith({ where: { id: "document-1", workspace: { ownerId: "owner-1" } } });
   });
 });

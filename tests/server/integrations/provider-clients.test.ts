@@ -32,6 +32,7 @@ describe("document provider adapters", () => {
     expect(inngestConstructor).toHaveBeenCalledWith({
       id: "knoctrl",
       eventKey: "inngest-event-test-key",
+      signingKey: "inngest-signing-test-key",
     });
   });
 

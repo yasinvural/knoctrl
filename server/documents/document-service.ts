@@ -29,6 +29,24 @@ type LockedDocumentUsage = {
 
 const uploadIntentLifetimeMilliseconds = 60 * 60 * 1000;
 
+export async function expireDocumentUpload(ownerId: string, documentId: string): Promise<void> {
+  await prisma.$transaction(async (transaction) => {
+    const claimed = await transaction.document.updateMany({
+      where: { id: documentId, workspace: { ownerId }, uploadedAt: null,
+        uploadIntentExpiresAt: { lt: new Date(Date.now() - 65 * 60 * 1000) } },
+      data: { status: "failed" },
+    });
+    if (claimed.count !== 1) return;
+    const document = await transaction.document.findFirst({
+      where: { id: documentId, workspace: { ownerId } },
+      select: { storageKey: true, fileSize: true, uploadedAt: true },
+    });
+    if (!document) throw new Error("Expired document unavailable.");
+    await prepareDocumentDeletion(transaction, ownerId, [document]);
+    await transaction.document.deleteMany({ where: { id: documentId, workspace: { ownerId } } });
+  });
+}
+
 export async function queueDocumentStorageCleanup(
   transaction: DocumentTransaction,
   ownerId: string,
