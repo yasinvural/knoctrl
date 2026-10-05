@@ -7,17 +7,17 @@ import { normalizeDocumentText } from "./chunking";
 
 export class DocumentExtractionError extends Error {}
 
-async function extractText(
-  content: Buffer,
-  filename: string
-): Promise<string> {
+async function extractText(content: Buffer, filename: string): Promise<string> {
   const extension = filename.split(".").pop()?.toLowerCase();
   let text: string;
-
   if (extension === "txt") {
     text = new TextDecoder("utf-8", { fatal: true }).decode(content);
   } else if (extension === "csv") {
-    text = parse(content, { bom: true, relax_column_count: true, skip_empty_lines: true })
+    text = parse(content, {
+      bom: true,
+      relax_column_count: true,
+      skip_empty_lines: true,
+    })
       .filter((row: string[]) => row.some((cell) => cell.trim()))
       .map((row: string[]) => row.join(" | "))
       .join("\n");
@@ -49,11 +49,16 @@ async function extractText(
   return normalized;
 }
 
-export async function extractDocumentText(content: Buffer, filename: string): Promise<string> {
+export async function extractDocumentText(
+  content: Buffer,
+  filename: string
+): Promise<string> {
   try {
     return await extractText(content, filename);
   } catch {
     // Provider errors can contain document contents, filenames, or object paths.
-    throw new DocumentExtractionError("The file could not be read or has no usable text.");
+    throw new DocumentExtractionError(
+      "The file could not be read or has no usable text."
+    );
   }
 }
