@@ -15,6 +15,7 @@ model Workspace {
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   folders        Folder[]
+  documents      Document[]
 
   @@unique([ownerId, normalizedName], map: "workspaces_owner_id_normalized_name_key")
   @@index([ownerId, createdAt, id], map: "workspaces_owner_id_created_at_id_idx")
@@ -29,8 +30,87 @@ model Folder {
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  documents      Document[]
 
   @@unique([workspaceId, normalizedName], map: "folders_workspace_id_normalized_name_key")
+  @@unique([id, workspaceId], map: "folders_id_workspace_id_key")
   @@index([workspaceId, createdAt, id], map: "folders_workspace_id_created_at_id_idx")
   @@map("folders")
+}
+
+enum DocumentStatus {
+  processing
+  available
+  failed
+}
+
+enum StorageCleanupStatus {
+  pending
+  completed
+}
+
+model Document {
+  id                String         @id @default(uuid()) @db.Uuid
+  workspaceId       String         @map("workspace_id") @db.Uuid
+  folderId          String?        @map("folder_id") @db.Uuid
+  filename          String         @db.VarChar(255)
+  storageKey        String         @unique @map("storage_key") @db.Text
+  contentType       String         @map("content_type") @db.VarChar(255)
+  fileSize          BigInt         @map("file_size")
+  status            DocumentStatus @default(processing)
+  processingAttempt Int            @default(1) @map("processing_attempt")
+  failureCode       String?        @map("failure_code") @db.VarChar(100)
+  failureMessage    String?        @map("failure_message") @db.VarChar(500)
+  uploadIntentExpiresAt DateTime   @map("upload_intent_expires_at") @db.Timestamptz(6)
+  uploadedAt        DateTime?      @map("uploaded_at") @db.Timestamptz(6)
+  availableAt       DateTime?      @map("available_at") @db.Timestamptz(6)
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace         Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  folder            Folder?        @relation(fields: [folderId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  chunks            DocumentChunk[]
+
+  @@index([workspaceId, createdAt, id], map: "documents_workspace_id_created_at_id_idx")
+  @@index([folderId, createdAt, id], map: "documents_folder_id_created_at_id_idx")
+  @@index([status, updatedAt], map: "documents_status_updated_at_idx")
+  @@map("documents")
+}
+
+model DocumentChunk {
+  id                String   @id @default(uuid()) @db.Uuid
+  documentId        String   @map("document_id") @db.Uuid
+  processingAttempt Int      @map("processing_attempt")
+  sequence          Int
+  content           String   @db.Text
+  startOffset       Int      @map("start_offset")
+  endOffset         Int      @map("end_offset")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  document          Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, processingAttempt, sequence], map: "document_chunks_document_id_processing_attempt_sequence_key")
+  @@map("document_chunks")
+}
+
+model DocumentUsage {
+  ownerId       String   @id @map("owner_id") @db.Uuid
+  storedBytes   BigInt   @default(0) @map("stored_bytes")
+  reservedBytes BigInt   @default(0) @map("reserved_bytes")
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("document_usages")
+}
+
+model StorageCleanupTask {
+  id            String               @id @default(uuid()) @db.Uuid
+  ownerId       String               @map("owner_id") @db.Uuid
+  storageKey    String               @unique @map("storage_key") @db.Text
+  status        StorageCleanupStatus @default(pending)
+  attemptCount  Int                  @default(0) @map("attempt_count")
+  lastErrorCode String?              @map("last_error_code") @db.VarChar(100)
+  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  completedAt   DateTime?            @map("completed_at") @db.Timestamptz(6)
+
+  @@index([status, createdAt], map: "storage_cleanup_tasks_status_created_at_idx")
+  @@map("storage_cleanup_tasks")
 }

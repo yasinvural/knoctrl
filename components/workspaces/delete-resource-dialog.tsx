@@ -22,6 +22,7 @@ type DeleteResourceDialogProps = {
   hiddenFields: Record<string, string>;
   title: string;
   triggerLabel: string;
+  triggerAccessibleLabel?: string;
 };
 
 export function DeleteResourceDialog({
@@ -30,6 +31,7 @@ export function DeleteResourceDialog({
   hiddenFields,
   title,
   triggerLabel,
+  triggerAccessibleLabel,
 }: DeleteResourceDialogProps) {
   const [open, setOpen] = useState(false);
   const actionWithClose = useCallback<DeleteResourceAction>(
@@ -58,17 +60,17 @@ export function DeleteResourceDialog({
       }}
       open={open}
     >
-      <Dialog.Trigger className={cn(buttonVariants({ variant: "destructive" }))}>
+      <Dialog.Trigger aria-label={triggerAccessibleLabel} className={cn(buttonVariants({ variant: "destructive" }))}>
         {triggerLabel}
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/40" />
         <Dialog.Viewport className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <Dialog.Popup className="w-full max-w-md rounded-xl bg-card p-6 text-card-foreground shadow-lg outline-none">
-            <Dialog.Title className="font-heading text-lg font-medium">
+            <Dialog.Title className="break-all font-heading text-lg font-medium">
               {title}
             </Dialog.Title>
-            <Dialog.Description className="mt-2 text-sm text-muted-foreground">
+            <Dialog.Description className="mt-2 break-words text-sm text-muted-foreground">
               {description}
             </Dialog.Description>
             <form action={formAction} className="mt-6 grid gap-3">

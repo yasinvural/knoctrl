@@ -1,6 +1,10 @@
 import "server-only";
 
 import { prisma } from "@/server/db/prisma";
+import {
+  prepareDocumentDeletion,
+} from "@/server/documents/document-service";
+import type { DocumentListItem } from "@/server/documents/types";
 
 import {
   validateWorkspaceResourceName,
@@ -19,10 +23,17 @@ export type FolderListItem = {
   id: string;
   name: string;
   createdAt: Date;
+  documents: DocumentListItem[];
+  documentCount: number;
+  documentPage: number;
 };
 
 export type WorkspaceDetail = WorkspaceListItem & {
   folders: FolderListItem[];
+  documents: DocumentListItem[];
+  documentCount: number;
+  rootDocumentCount: number;
+  documentPage: number;
 };
 
 export type WorkspaceList = {
@@ -41,13 +52,13 @@ export type WorkspaceDeletionResult =
   | {
       status: "success";
       folderCount: number;
-      documentCount: 0;
+      documentCount: number;
     }
   | { status: "unavailable" }
   | { status: "error" };
 
 export type FolderDeletionResult =
-  | { status: "success"; documentCount: 0 }
+  | { status: "success"; documentCount: number }
   | { status: "unavailable" }
   | { status: "error" };
 
@@ -78,11 +89,17 @@ export async function listWorkspaces(
   ownerId: string,
   cursor?: string
 ): Promise<WorkspaceList> {
+  const ownedCursor = cursor
+    ? await prisma.workspace.findFirst({
+        where: { id: cursor, ownerId },
+        select: { id: true },
+      })
+    : null;
   const workspaces = await prisma.workspace.findMany({
     where: { ownerId },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: workspacePageSize + 1,
-    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    ...(ownedCursor ? { cursor: { id: ownedCursor.id }, skip: 1 } : {}),
     select: {
       id: true,
       name: true,
@@ -104,9 +121,10 @@ export async function listWorkspaces(
 
 export async function getWorkspaceDetail(
   ownerId: string,
-  workspaceId: string
+  workspaceId: string,
+  documentPagination: { folderId?: string; page?: number } = {}
 ): Promise<WorkspaceDetail | null> {
-  return prisma.workspace.findFirst({
+  const workspace = await prisma.workspace.findFirst({
     where: {
       id: workspaceId,
       ownerId,
@@ -121,10 +139,83 @@ export async function getWorkspaceDetail(
           id: true,
           name: true,
           createdAt: true,
+          _count: { select: { documents: true } },
+          documents: {
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+            take: workspacePageSize,
+            select: {
+              id: true,
+              filename: true,
+              folderId: true,
+              status: true,
+              failureMessage: true,
+              createdAt: true,
+            },
+          },
+        },
+      },
+      documents: {
+        where: { folderId: null },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        take: workspacePageSize,
+        select: {
+          id: true,
+          filename: true,
+          folderId: true,
+          status: true,
+          failureMessage: true,
+          createdAt: true,
+        },
+      },
+      _count: {
+        select: {
+          documents: true,
         },
       },
     },
   });
+
+  if (!workspace) {
+    return null;
+  }
+
+  const rootDocumentCount = workspace._count.documents - workspace.folders.reduce((sum, folder) => sum + folder._count.documents, 0);
+  const folders = workspace.folders.map((folder) => ({
+    id: folder.id, name: folder.name, createdAt: folder.createdAt,
+    documents: folder.documents, documentCount: folder._count.documents, documentPage: 1,
+  }));
+  const selectedFolder = documentPagination.folderId ? folders.find((folder) => folder.id === documentPagination.folderId) : undefined;
+  const requestedPage = Math.max(1, Math.floor(documentPagination.page ?? 1));
+  const count = selectedFolder ? selectedFolder.documentCount : rootDocumentCount;
+  const page = Math.min(requestedPage, Math.max(1, Math.ceil(count / workspacePageSize)));
+  let rootDocuments = workspace.documents;
+  let rootPage = 1;
+  if (page > 1 && (!documentPagination.folderId || selectedFolder)) {
+    const documents = await prisma.document.findMany({
+      where: { workspaceId, folderId: selectedFolder?.id ?? null, workspace: { ownerId } },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: workspacePageSize, skip: (page - 1) * workspacePageSize,
+      select: { id: true, filename: true, folderId: true, status: true, failureMessage: true, createdAt: true },
+    });
+    if (selectedFolder) {
+      selectedFolder.documents = documents;
+      selectedFolder.documentPage = page;
+    } else {
+      rootDocuments = documents;
+      rootPage = page;
+    }
+  }
+
+  return {
+    id: workspace.id,
+    name: workspace.name,
+    createdAt: workspace.createdAt,
+    folders,
+    documents: rootDocuments,
+    documentCount: workspace._count.documents,
+    rootDocumentCount,
+    documentPage: rootPage,
+  };
 }
 
 export async function createWorkspace(
@@ -211,6 +302,7 @@ export async function deleteWorkspace(
           _count: {
             select: {
               folders: true,
+              documents: true,
             },
           },
         },
@@ -219,6 +311,13 @@ export async function deleteWorkspace(
       if (!workspace) {
         return { status: "unavailable" };
       }
+
+      const documents = await transaction.document.findMany({
+        where: { workspaceId: workspace.id },
+        select: { storageKey: true, fileSize: true, uploadedAt: true },
+      });
+
+      await prepareDocumentDeletion(transaction, ownerId, documents);
 
       const deleted = await transaction.workspace.deleteMany({
         where: {
@@ -234,7 +333,7 @@ export async function deleteWorkspace(
       return {
         status: "success",
         folderCount: workspace._count.folders,
-        documentCount: 0,
+        documentCount: workspace._count.documents,
       };
     });
   } catch {
@@ -336,18 +435,48 @@ export async function deleteFolder(
   folderId: string
 ): Promise<FolderDeletionResult> {
   try {
-    const deleted = await prisma.folder.deleteMany({
-      where: {
-        id: folderId,
-        workspace: {
-          ownerId,
+    return await prisma.$transaction(async (transaction) => {
+      const folder = await transaction.folder.findFirst({
+        where: {
+          id: folderId,
+          workspace: {
+            ownerId,
+          },
         },
-      },
-    });
+        select: {
+          id: true,
+          _count: {
+            select: {
+              documents: true,
+            },
+          },
+        },
+      });
 
-    return deleted.count === 1
-      ? { status: "success", documentCount: 0 }
-      : { status: "unavailable" };
+      if (!folder) {
+        return { status: "unavailable" };
+      }
+
+      const documents = await transaction.document.findMany({
+        where: { folderId: folder.id, workspace: { ownerId } },
+        select: { storageKey: true, fileSize: true, uploadedAt: true },
+      });
+
+      await prepareDocumentDeletion(transaction, ownerId, documents);
+
+      const deleted = await transaction.folder.deleteMany({
+        where: {
+          id: folder.id,
+          workspace: {
+            ownerId,
+          },
+        },
+      });
+
+      return deleted.count === 1
+        ? { status: "success", documentCount: folder._count.documents }
+        : { status: "unavailable" };
+    });
   } catch {
     return { status: "error" };
   }
